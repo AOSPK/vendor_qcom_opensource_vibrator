@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -52,7 +52,15 @@ namespace vibrator {
 #define MEDIUM_MAGNITUDE        0x5fff
 #define LIGHT_MAGNITUDE         0x3fff
 #define INVALID_VALUE           -1
-#define CUSTOM_DATA_LEN    3
+#define CUSTOM_DATA_LEN         3
+#define NAME_BUF_SIZE           32
+
+#define MSM_CPU_LAHAINA         415
+#define APQ_CPU_LAHAINA         439
+#define MSM_CPU_SHIMA           450
+#define MSM_CPU_SM8325          501
+#define APQ_CPU_SM8325P         502
+#define MSM_CPU_YUPIK           475
 
 #define test_bit(bit, array)    ((array)[(bit)/8] & (1<<((bit)%8)))
 
@@ -66,6 +74,7 @@ InputFFDevice::InputFFDevice()
     uint8_t ffBitmask[FF_CNT / 8];
     char devicename[PATH_MAX];
     const char *INPUT_DIR = "/dev/input/";
+    char name[NAME_BUF_SIZE];
     int fd, ret;
     int soc = property_get_int32("ro.vendor.qti.soc_id", -1);
 
@@ -97,6 +106,20 @@ InputFFDevice::InputFFDevice()
             continue;
         }
 
+        ret = TEMP_FAILURE_RETRY(ioctl(fd, EVIOCGNAME(sizeof(name)), name));
+        if (ret == -1) {
+            ALOGE("get input device name %s failed, errno = %d\n", devicename, errno);
+            close(fd);
+            continue;
+        }
+
+        if (strcmp(name, "qcom-hv-haptics") && strcmp(name, "qti-haptics")) {
+            ALOGD("not a qcom/qti haptics device\n");
+            close(fd);
+            continue;
+        }
+
+        ALOGI("%s is detected at %s\n", name, devicename);
         ret = TEMP_FAILURE_RETRY(ioctl(fd, EVIOCGBIT(EV_FF, sizeof(ffBitmask)), ffBitmask));
         if (ret == -1) {
             ALOGE("ioctl failed, errno = %d", errno);
@@ -116,10 +139,18 @@ InputFFDevice::InputFFDevice()
                 fscanf(fp, "%u", &soc);
                 fclose(fp);
             }
-            if (soc == 400 || soc == 415) {
+            switch (soc) {
+            case MSM_CPU_LAHAINA:
+            case APQ_CPU_LAHAINA:
+            case MSM_CPU_SHIMA:
+            case MSM_CPU_SM8325:
+            case APQ_CPU_SM8325P:
+            case MSM_CPU_YUPIK:
                 mSupportExternalControl = true;
-            } else {
+                break;
+            default:
                 mSupportExternalControl = false;
+                break;
             }
             break;
         }
@@ -444,8 +475,11 @@ ndk::ScopedAStatus Vibrator::perform(Effect effect, EffectStrength es, const std
 
     ALOGD("Vibrator perform effect %d", effect);
 
-    if (effect < Effect::CLICK ||
-            effect > Effect::HEAVY_CLICK)
+#ifdef TARGET_SUPPORTS_OFFLOAD
+    if (effect < Effect::CLICK ||  effect > Effect::RINGTONE_15)
+#else
+    if (effect < Effect::CLICK ||  effect > Effect::HEAVY_CLICK)
+#endif
         return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_UNSUPPORTED_OPERATION));
 
     if (es != EffectStrength::LIGHT && es != EffectStrength::MEDIUM && es != EffectStrength::STRONG)
@@ -472,9 +506,14 @@ ndk::ScopedAStatus Vibrator::getSupportedEffects(std::vector<Effect>* _aidl_retu
     if (ledVib.mDetected)
         return ndk::ScopedAStatus::ok();
 
+#ifdef TARGET_SUPPORTS_OFFLOAD
+    *_aidl_return = {Effect::CLICK, Effect::DOUBLE_CLICK, Effect::TICK, Effect::THUD,
+                     Effect::POP, Effect::HEAVY_CLICK, Effect::RINGTONE_12,
+                     Effect::RINGTONE_13, Effect::RINGTONE_14, Effect::RINGTONE_15};
+#else
     *_aidl_return = {Effect::CLICK, Effect::DOUBLE_CLICK, Effect::TICK, Effect::THUD,
                      Effect::POP, Effect::HEAVY_CLICK};
-
+#endif
     return ndk::ScopedAStatus::ok();
 }
 
