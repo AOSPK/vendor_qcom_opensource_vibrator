@@ -57,7 +57,7 @@ cc_library_shared {
         "libqtivibratoreffectoffload",
         "libsoc_helper",
         "libbinder_ndk",
-        "android.hardware.vibrator-ndk_platform",
+        "android.hardware.vibrator-V1-ndk_platform",
     ],
     export_include_dirs: ["include"],
     header_libs: ["generated_kernel_headers"],
@@ -80,7 +80,7 @@ cc_binary {
         "libutils",
         "libbase",
         "libbinder_ndk",
-        "android.hardware.vibrator-ndk_platform",
+        "android.hardware.vibrator-V1-ndk_platform",
         "vendor.qti.hardware.vibrator.offload.impl",
     ],
 }
